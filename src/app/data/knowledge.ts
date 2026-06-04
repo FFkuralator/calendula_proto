@@ -1,5 +1,4 @@
-import React from 'react';
-import { GraduationCap, FileCheck, FileText, Users, BookMarked, BookOpen, Scale, ClipboardList, Layers, Award, HelpCircle, Lightbulb, PlayCircle, LifeBuoy } from 'lucide-react';
+import { GraduationCap, FileCheck, FileText, Users, BookMarked, BookOpen, Scale, ClipboardList, Layers, Award } from 'lucide-vue-next';
 
 export type KnowledgeSection = 'Помощь для РОПа' | 'Возможности для РОПа' | 'Вводный курс' | 'Частые вопросы';
 export type KnowledgeCategory = 'ГИА' | 'Методология' | 'Аккредитация' | 'Практика';
