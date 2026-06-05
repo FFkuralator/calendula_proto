@@ -1,0 +1,18 @@
+services:
+  backend:
+    build:
+      context: ../calendula_back
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../calendula_back/calendula_back:/app
+
+  frontend:
+    build: .
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - backend
