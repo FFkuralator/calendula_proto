@@ -1,12 +1,4 @@
 services:
-  backend:
-    build:
-      context: ../calendula_back
-    ports:
-      - "8000:8000"
-    volumes:
-      - ../calendula_back/calendula_back:/app
-
   frontend:
     build: .
     ports:
@@ -14,5 +6,5 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
-    depends_on:
-      - backend
+    environment:
+      - VITE_API_TARGET=http://host.docker.internal:8000
