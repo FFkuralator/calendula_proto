@@ -14,7 +14,11 @@ Vue 3 + Vite + Tailwind CSS.
 docker compose up --build
 ```
 
-Фронтенд: http://localhost:5173
+| Сервис | Адрес |
+|---|---|
+| Фронтенд | http://localhost:5173 |
+| Бэкенд API | http://localhost:8000/api/ |
+| Django Admin | http://localhost:8000/admin/ |
 
 API-запросы на `/api/...` автоматически проксируются на бэкенд (порт 8000).
 
