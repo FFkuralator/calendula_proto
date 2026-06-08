@@ -4,19 +4,23 @@ import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import type { Task } from '../data/tasks'
 import { CATEGORY_CONFIG, MONTH_NAMES_RU } from '../data/tasks'
 
-const props = defineProps<{
+interface Props {
   tasks: Task[]
   referenceDate: Date
-}>()
+}
 
-const emit = defineEmits<{
-  (e: 'task-click', task: Task): void
-  (e: 'week-change', date: Date): void
-}>()
+interface Emits {
+  taskClick: [task: Task]
+  weekChange: [date: Date]
+}
 
+const props = defineProps<Props>()
+const emit = defineEmits<Emits>()
+
+const DAY_NAMES_FULL = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
 const DAY_NAMES_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 
-function getMondayOf(date: Date): Date {
+const getMondayOf = (date: Date): Date => {
   const d = new Date(date)
   const day = d.getDay()
   const diff = day === 0 ? -6 : 1 - day
@@ -25,17 +29,17 @@ function getMondayOf(date: Date): Date {
   return d
 }
 
-function addDays(date: Date, n: number): Date {
+const addDays = (date: Date, n: number): Date => {
   const d = new Date(date)
   d.setDate(d.getDate() + n)
   return d
 }
 
-function isSameDay(a: Date, b: Date): boolean {
+const isSameDay = (a: Date, b: Date) => {
   return a.getDate() === b.getDate() && a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear()
 }
 
-function formatWeekRange(monday: Date): string {
+const formatWeekRange = (monday: Date): string => {
   const sunday = addDays(monday, 6)
   const sameMonth = monday.getMonth() === sunday.getMonth()
   if (sameMonth) {
@@ -46,58 +50,58 @@ function formatWeekRange(monday: Date): string {
 
 const monday = computed(() => getMondayOf(props.referenceDate))
 
-const today = new Date()
-today.setHours(0, 0, 0, 0)
+const today = computed(() => {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  return d
+})
 
 const weekDays = computed(() => Array.from({ length: 7 }, (_, i) => addDays(monday.value, i)))
 
-const weekRangeLabel = computed(() => formatWeekRange(monday.value))
-
-function goPrev() { emit('week-change', addDays(monday.value, -7)) }
-function goNext() { emit('week-change', addDays(monday.value, 7)) }
-function goToday() { emit('week-change', new Date()) }
-
-function getTasksForDay(day: Date): Task[] {
-  return props.tasks.filter((t) => {
+const getTasksForDay = (day: Date) =>
+  props.tasks.filter(t => {
     const d = new Date(t.deadline)
     d.setHours(0, 0, 0, 0)
     return isSameDay(d, day)
   })
-}
 
-const summaryItems = computed(() =>
-  weekDays.value
-    .map((day, i) => ({ i, day, count: getTasksForDay(day).length }))
-    .filter((x) => x.count > 0)
-)
+const goPrev = () => emit('weekChange', addDays(monday.value, -7))
+const goNext = () => emit('weekChange', addDays(monday.value, 7))
+const goToday = () => emit('weekChange', new Date())
 
-const hasNoTasksThisWeek = computed(() => weekDays.value.every((d) => getTasksForDay(d).length === 0))
+const hasAnyTasks = computed(() => weekDays.value.some(day => getTasksForDay(day).length > 0))
 </script>
 
 <template>
   <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-    <!-- Week navigation -->
     <div class="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 bg-gray-50/60">
       <div class="flex items-center gap-2">
-        <button @click="goPrev" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition-colors">
+        <button
+          @click="goPrev"
+          class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition-colors"
+        >
           <ChevronLeft :size="16" />
         </button>
-        <span class="text-sm font-semibold text-gray-800 min-w-[200px] text-center">{{ weekRangeLabel }}</span>
-        <button @click="goNext" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition-colors">
+        <span class="text-sm font-semibold text-gray-800 min-w-[200px] text-center">{{ formatWeekRange(monday) }}</span>
+        <button
+          @click="goNext"
+          class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition-colors"
+        >
           <ChevronRight :size="16" />
         </button>
       </div>
-      <button @click="goToday" class="text-xs font-medium text-indigo-600 hover:text-indigo-700 px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors">
+      <button
+        @click="goToday"
+        class="text-xs font-medium text-indigo-600 hover:text-indigo-700 px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors"
+      >
         Сегодня
       </button>
     </div>
 
-    <!-- Day columns -->
     <div class="grid grid-cols-7">
-      <!-- Headers -->
       <div
         v-for="(day, i) in weekDays"
-        :key="`hdr-${i}`"
+        :key="`header-${i}`"
         :class="[
           'py-3 px-2 text-center border-b border-gray-100',
           i < 6 ? 'border-r border-gray-100' : '',
@@ -117,10 +121,9 @@ const hasNoTasksThisWeek = computed(() => weekDays.value.every((d) => getTasksFo
         </div>
       </div>
 
-      <!-- Task cells -->
       <div
         v-for="(day, i) in weekDays"
-        :key="`cell-${i}`"
+        :key="`tasks-${i}`"
         :class="[
           'min-h-[300px] p-1.5',
           i < 6 ? 'border-r border-gray-100' : '',
@@ -134,7 +137,7 @@ const hasNoTasksThisWeek = computed(() => weekDays.value.every((d) => getTasksFo
           <button
             v-for="task in getTasksForDay(day)"
             :key="task.id"
-            @click="emit('task-click', task)"
+            @click="emit('taskClick', task)"
             :class="[
               'w-full text-left rounded-xl px-2 py-2 text-[11px] leading-snug transition-all hover:opacity-90 hover:shadow-sm group border',
               CATEGORY_CONFIG[task.category].bg,
@@ -154,13 +157,14 @@ const hasNoTasksThisWeek = computed(() => weekDays.value.every((d) => getTasksFo
       </div>
     </div>
 
-    <!-- Summary row -->
     <div class="border-t border-gray-100 px-5 py-2.5 bg-gray-50/50 flex items-center gap-4">
-      <span v-for="item in summaryItems" :key="item.i" class="text-xs text-gray-500">
-        <strong class="text-gray-700">{{ DAY_NAMES_SHORT[item.i] }}</strong>: {{ item.count }}
-        {{ item.count === 1 ? 'задача' : 'задачи' }}
-      </span>
-      <span v-if="hasNoTasksThisWeek" class="text-xs text-gray-400">На этой неделе задач нет</span>
+      <template v-for="(day, i) in weekDays" :key="`summary-${i}`">
+        <span v-if="getTasksForDay(day).length > 0" class="text-xs text-gray-500">
+          <strong class="text-gray-700">{{ DAY_NAMES_SHORT[i] }}</strong
+          >: {{ getTasksForDay(day).length }} {{ getTasksForDay(day).length === 1 ? 'задача' : 'задачи' }}
+        </span>
+      </template>
+      <span v-if="!hasAnyTasks" class="text-xs text-gray-400">На этой неделе задач нет</span>
     </div>
   </div>
 </template>

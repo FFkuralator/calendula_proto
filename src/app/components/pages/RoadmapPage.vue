@@ -2,13 +2,15 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { SlidersHorizontal, ChevronDown, Check, X, List, Calendar, CalendarDays, Info, BookOpen, FileText, ExternalLink } from 'lucide-vue-next'
 import {
-  CATEGORIES, MONTH_NAMES_RU,
+  CATEGORIES, ACADEMIC_MONTHS, MONTH_NAMES_RU,
   CATEGORY_CONFIG, ALL_TASKS,
-  getAcademicYearRange,
+  getAcademicYearRange, getCalendarYear,
 } from '../../data/tasks'
 import type { Task, TaskCategory } from '../../data/tasks'
+import MonthCalendar from '../MonthCalendar.vue'
+import WeekView from '../WeekView.vue'
 
-type ViewMode = 'calendar' | 'list'
+type ViewMode = 'calendar' | 'week' | 'list'
 
 const props = defineProps<{
   searchQuery: string
@@ -31,14 +33,26 @@ function formatDate(dateStr: string) {
   return `${d.getDate().toString().padStart(2, '0')}.${(d.getMonth() + 1).toString().padStart(2, '0')}.${d.getFullYear()}`
 }
 
+const now = new Date()
+const defaultMonthEntry = ACADEMIC_MONTHS.find((m) => {
+  const cy = getCalendarYear(m.index, props.academicYear)
+  return m.index === now.getMonth() && cy === now.getFullYear()
+})
+
+const selectedMonths = ref<number[]>(defaultMonthEntry ? [defaultMonthEntry.index] : [])
+const showAllMonths = ref(selectedMonths.value.length === 0)
+const monthPickerOpen = ref(false)
 const filterOpen = ref(false)
 const activeCategories = ref<TaskCategory[]>([...CATEGORIES])
-const viewMode = ref<ViewMode>('list')
+const viewMode = ref<ViewMode>('calendar')
+const weekRef = ref(new Date())
 
 const filterRef = ref<HTMLDivElement | null>(null)
+const monthPickerRef = ref<HTMLDivElement | null>(null)
 
 const handleClickOutside = (e: MouseEvent) => {
   if (filterRef.value && !filterRef.value.contains(e.target as Node)) filterOpen.value = false
+  if (monthPickerRef.value && !monthPickerRef.value.contains(e.target as Node)) monthPickerOpen.value = false
 }
 
 onMounted(() => document.addEventListener('mousedown', handleClickOutside))
@@ -70,6 +84,14 @@ const filteredTasks = computed(() => {
   return tasks
 })
 
+const displayedTasks = computed(() => {
+  if (showAllMonths.value || selectedMonths.value.length === 0) return filteredTasks.value
+  return filteredTasks.value.filter((t) => {
+    const d = new Date(t.deadline)
+    return selectedMonths.value.includes(d.getMonth())
+  })
+})
+
 const filterCount = computed(() =>
   activeCategories.value.length < CATEGORIES.length ? CATEGORIES.length - activeCategories.value.length : 0
 )
@@ -82,12 +104,31 @@ function toggleCategory(cat: TaskCategory) {
   }
 }
 
+function handleSelectAllMonths() {
+  showAllMonths.value = true
+  selectedMonths.value = []
+}
+
+function toggleMonth(idx: number) {
+  showAllMonths.value = false
+  if (selectedMonths.value.includes(idx)) {
+    selectedMonths.value = selectedMonths.value.filter((m) => m !== idx)
+  } else {
+    selectedMonths.value = [...selectedMonths.value, idx]
+  }
+}
+
+function resetMonths() {
+  selectedMonths.value = []
+  showAllMonths.value = true
+}
+
 function resetFilters() {
   activeCategories.value = [...CATEGORIES]
 }
 
 const listGroups = computed(() => {
-  const sorted = [...filteredTasks.value].sort(
+  const sorted = [...displayedTasks.value].sort(
     (a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime()
   )
   const map = new Map<string, Task[]>()
@@ -106,6 +147,14 @@ const listGroups = computed(() => {
   })
 })
 
+function getMonthTaskCount(mIndex: number): number {
+  const cy = getCalendarYear(mIndex, props.academicYear)
+  return yearTasks.value.filter((t) => {
+    const d = new Date(t.deadline)
+    return d.getMonth() === mIndex && d.getFullYear() === cy
+  }).length
+}
+
 function getDiffDays(deadline: string): number {
   const today2 = new Date()
   today2.setHours(0, 0, 0, 0)
@@ -114,9 +163,30 @@ function getDiffDays(deadline: string): number {
   return Math.ceil((dl.getTime() - today2.getTime()) / 86400000)
 }
 
-const viewModes: [ViewMode, any, string][] = [
-  ['list', List, 'Список'],
-]
+const calendarMonths = computed(() => {
+  if (showAllMonths.value) {
+    return ACADEMIC_MONTHS.map((m) => {
+      const cy = getCalendarYear(m.index, props.academicYear)
+      const mTasks = displayedTasks.value.filter((t) => {
+        const d = new Date(t.deadline)
+        return d.getMonth() === m.index && d.getFullYear() === cy
+      })
+      return mTasks.length > 0 ? { m, cy, mTasks } : null
+    }).filter(Boolean) as { m: typeof ACADEMIC_MONTHS[0]; cy: number; mTasks: Task[] }[]
+  }
+  return ACADEMIC_MONTHS.filter((m) => selectedMonths.value.includes(m.index)).map((m) => {
+    const cy = getCalendarYear(m.index, props.academicYear)
+    const mTasks = displayedTasks.value.filter((t) => {
+      const d = new Date(t.deadline)
+      return d.getMonth() === m.index && d.getFullYear() === cy
+    })
+    return { m, cy, mTasks }
+  })
+})
+
+function handleTaskClick(task: Task) {
+  emit('navigateTask', task.id)
+}
 </script>
 
 <template>
@@ -128,6 +198,74 @@ const viewModes: [ViewMode, any, string][] = [
       </div>
 
       <div class="flex flex-wrap items-center gap-2.5 mb-4">
+        <button
+          @click="handleSelectAllMonths"
+          :class="[
+            'px-3.5 py-2 rounded-xl text-sm font-medium border transition-all',
+            showAllMonths
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200 border-indigo-600'
+              : 'bg-white border-gray-200 text-gray-600 hover:border-indigo-200 hover:text-indigo-600',
+          ]"
+        >
+          Все месяцы
+        </button>
+
+        <div class="relative" ref="monthPickerRef">
+          <button
+            @click="monthPickerOpen = !monthPickerOpen"
+            :class="[
+              'flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium border transition-all',
+              !showAllMonths && selectedMonths.length > 0
+                ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                : 'bg-white border-gray-200 text-gray-600 hover:border-indigo-200 hover:text-indigo-600',
+            ]"
+          >
+            <CalendarDays :size="14" />
+            Выбрать месяц
+            <span
+              v-if="!showAllMonths && selectedMonths.length > 0"
+              class="w-5 h-5 bg-indigo-600 text-white rounded-full text-[10px] flex items-center justify-center font-bold"
+            >
+              {{ selectedMonths.length }}
+            </span>
+            <ChevronDown :size="13" :class="['transition-transform', monthPickerOpen ? 'rotate-180' : '']" />
+          </button>
+          <div
+            v-if="monthPickerOpen"
+            class="absolute left-0 top-full mt-2 w-60 bg-white rounded-2xl border border-gray-200 shadow-xl z-30 p-3"
+          >
+            <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1 mb-2">Выберите один или несколько</div>
+            <div class="grid grid-cols-3 gap-1.5">
+              <button
+                v-for="m in ACADEMIC_MONTHS"
+                :key="m.name"
+                @click="toggleMonth(m.index)"
+                :class="[
+                  'relative flex flex-col items-center py-2 px-1 rounded-xl text-xs font-medium border transition-all',
+                  selectedMonths.includes(m.index)
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'border-gray-100 text-gray-600 hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50',
+                ]"
+              >
+                <span>{{ m.short }}</span>
+                <span
+                  v-if="getMonthTaskCount(m.index) > 0"
+                  :class="['text-[9px] font-bold mt-0.5', selectedMonths.includes(m.index) ? 'text-indigo-200' : 'text-gray-400']"
+                >
+                  {{ getMonthTaskCount(m.index) }}
+                </span>
+              </button>
+            </div>
+            <button
+              v-if="selectedMonths.length > 0"
+              @click="resetMonths"
+              class="mt-2 w-full text-xs text-indigo-600 hover:text-indigo-700 font-medium py-1.5 rounded-lg hover:bg-indigo-50 transition-colors"
+            >
+              Сбросить выбор
+            </button>
+          </div>
+        </div>
+
         <div class="relative ml-auto" ref="filterRef">
           <button
             @click="filterOpen = !filterOpen"
@@ -182,10 +320,40 @@ const viewModes: [ViewMode, any, string][] = [
             </div>
           </div>
         </div>
+
+        <div class="flex items-center bg-gray-100 rounded-xl p-1 shrink-0">
+          <button
+            @click="viewMode = 'calendar'"
+            :class="[
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
+              viewMode === 'calendar' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700',
+            ]"
+          >
+            <Calendar :size="13" />Месяц
+          </button>
+          <button
+            @click="viewMode = 'week'"
+            :class="[
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
+              viewMode === 'week' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700',
+            ]"
+          >
+            <CalendarDays :size="13" />Неделя
+          </button>
+          <button
+            @click="viewMode = 'list'"
+            :class="[
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
+              viewMode === 'list' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700',
+            ]"
+          >
+            <List :size="13" />Список
+          </button>
+        </div>
       </div>
 
       <div class="flex items-center gap-4 mb-4 text-xs text-gray-500">
-        <span>Задач: <strong class="text-gray-800">{{ filteredTasks.length }}</strong></span>
+        <span>Задач: <strong class="text-gray-800">{{ displayedTasks.length }}</strong></span>
         <button
           v-if="filterCount > 0"
           @click="resetFilters"
@@ -195,62 +363,83 @@ const viewModes: [ViewMode, any, string][] = [
         </button>
       </div>
 
-      <div v-if="listGroups.length === 0" class="text-center py-16 text-gray-400 bg-white rounded-2xl border border-gray-200">
-        <Calendar :size="40" class="mx-auto mb-3 opacity-30" />
-        <p class="text-sm">Задачи не найдены</p>
+      <div v-if="viewMode === 'calendar'" class="space-y-5">
+        <MonthCalendar
+          v-for="{ m, cy, mTasks } in calendarMonths"
+          :key="`${cy}-${m.index}`"
+          :month="m.index"
+          :year="cy"
+          :tasks="mTasks"
+          @task-click="handleTaskClick"
+        />
       </div>
-      <div v-else class="space-y-5">
-        <div v-for="group in listGroups" :key="group.date">
-          <div class="flex items-center gap-3 mb-2.5">
-            <div class="w-2 h-2 rounded-full bg-indigo-400" />
-            <span class="text-sm font-semibold text-gray-700 capitalize">{{ group.label }}</span>
-            <div class="flex-1 h-px bg-gray-100" />
-          </div>
-          <div class="space-y-2">
-            <button
-              v-for="task in group.tasks"
-              :key="task.id"
-              @click="emit('navigateTask', task.id)"
-              class="w-full text-left rounded-xl border p-4 transition-all group bg-white border-gray-200 hover:border-indigo-200 hover:shadow-sm"
-            >
-              <div class="flex items-start gap-3">
-                <span :class="['w-3 h-3 rounded-full shrink-0 mt-1', CATEGORY_CONFIG[task.category].dot]" />
-                <div class="flex-1 min-w-0">
-                  <div class="flex items-start justify-between gap-3 mb-1.5">
-                    <span class="text-sm font-semibold leading-snug text-gray-800 group-hover:text-indigo-700 transition-colors">
-                      {{ task.title }}
-                    </span>
-                  </div>
-                  <p class="text-xs leading-relaxed mb-2.5 line-clamp-1 text-gray-500">{{ task.description }}</p>
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <span
-                      :class="[
-                        'flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-lg',
-                        getDiffDays(task.deadline) <= 3 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600',
-                      ]"
-                    >
-                      <span class="opacity-60">до</span> {{ formatDate(task.deadline) }}
-                      <template v-if="getDiffDays(task.deadline) >= 0 && getDiffDays(task.deadline) <= 3">
-                        · {{ getDiffDays(task.deadline) === 0 ? 'сегодня' : `${getDiffDays(task.deadline)} дн.` }}
-                      </template>
-                    </span>
-                    <span
-                      :class="[
-                        'text-[11px] font-medium px-2 py-0.5 rounded-lg border',
-                        CATEGORY_CONFIG[task.category].bg,
-                        CATEGORY_CONFIG[task.category].text,
-                        CATEGORY_CONFIG[task.category].border,
-                      ]"
-                    >{{ task.category }}</span>
-                    <span
-                      v-for="tag in task.tags.slice(0, 2)"
-                      :key="tag"
-                      class="text-[11px] px-2 py-0.5 rounded-lg bg-gray-100 text-gray-500"
-                    >{{ tag }}</span>
+
+      <WeekView
+        v-else-if="viewMode === 'week'"
+        :tasks="displayedTasks"
+        :reference-date="weekRef"
+        @task-click="handleTaskClick"
+        @week-change="(d) => { weekRef = d }"
+      />
+
+      <div v-else>
+        <div v-if="listGroups.length === 0" class="text-center py-16 text-gray-400 bg-white rounded-2xl border border-gray-200">
+          <Calendar :size="40" class="mx-auto mb-3 opacity-30" />
+          <p class="text-sm">Задачи не найдены</p>
+        </div>
+        <div v-else class="space-y-5">
+          <div v-for="group in listGroups" :key="group.date">
+            <div class="flex items-center gap-3 mb-2.5">
+              <div class="w-2 h-2 rounded-full bg-indigo-400" />
+              <span class="text-sm font-semibold text-gray-700 capitalize">{{ group.label }}</span>
+              <div class="flex-1 h-px bg-gray-100" />
+            </div>
+            <div class="space-y-2">
+              <button
+                v-for="task in group.tasks"
+                :key="task.id"
+                @click="handleTaskClick(task)"
+                class="w-full text-left rounded-xl border p-4 transition-all group bg-white border-gray-200 hover:border-indigo-200 hover:shadow-sm"
+              >
+                <div class="flex items-start gap-3">
+                  <span :class="['w-3 h-3 rounded-full shrink-0 mt-1', CATEGORY_CONFIG[task.category].dot]" />
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-start justify-between gap-3 mb-1.5">
+                      <span class="text-sm font-semibold leading-snug text-gray-800 group-hover:text-indigo-700 transition-colors">
+                        {{ task.title }}
+                      </span>
+                    </div>
+                    <p class="text-xs leading-relaxed mb-2.5 line-clamp-1 text-gray-500">{{ task.description }}</p>
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span
+                        :class="[
+                          'flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-lg',
+                          getDiffDays(task.deadline) <= 3 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600',
+                        ]"
+                      >
+                        <span class="opacity-60">до</span> {{ formatDate(task.deadline) }}
+                        <template v-if="getDiffDays(task.deadline) >= 0 && getDiffDays(task.deadline) <= 3">
+                          · {{ getDiffDays(task.deadline) === 0 ? 'сегодня' : `${getDiffDays(task.deadline)} дн.` }}
+                        </template>
+                      </span>
+                      <span
+                        :class="[
+                          'text-[11px] font-medium px-2 py-0.5 rounded-lg border',
+                          CATEGORY_CONFIG[task.category].bg,
+                          CATEGORY_CONFIG[task.category].text,
+                          CATEGORY_CONFIG[task.category].border,
+                        ]"
+                      >{{ task.category }}</span>
+                      <span
+                        v-for="tag in task.tags.slice(0, 2)"
+                        :key="tag"
+                        class="text-[11px] px-2 py-0.5 rounded-lg bg-gray-100 text-gray-500"
+                      >{{ tag }}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </button>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -267,11 +456,17 @@ const viewModes: [ViewMode, any, string][] = [
             <span class="w-4 h-4 rounded-full bg-indigo-200 text-indigo-700 text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">
               1
             </span>
-            <span class="text-[11px] text-indigo-700 leading-relaxed">Используйте фильтры по категории</span>
+            <span class="text-[11px] text-indigo-700 leading-relaxed">Выберите месяц или период для просмотра</span>
           </li>
           <li class="flex items-start gap-2">
             <span class="w-4 h-4 rounded-full bg-indigo-200 text-indigo-700 text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">
               2
+            </span>
+            <span class="text-[11px] text-indigo-700 leading-relaxed">Используйте фильтры по категории</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <span class="w-4 h-4 rounded-full bg-indigo-200 text-indigo-700 text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+              3
             </span>
             <span class="text-[11px] text-indigo-700 leading-relaxed">Нажмите на задачу для просмотра подробностей</span>
           </li>
