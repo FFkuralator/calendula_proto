@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { Star, BookOpen, Filter } from 'lucide-vue-next'
+import { computed, ref } from 'vue'
+import { Star, BookOpen } from 'lucide-vue-next'
 import { KNOWLEDGE_ARTICLES } from '../../data/knowledge'
 
 interface Props {
+  searchQuery: string
   favorites: Set<string>
 }
 
@@ -15,7 +16,29 @@ interface Emits {
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
-const articles = computed(() => KNOWLEDGE_ARTICLES)
+const showFavoritesOnly = ref(false)
+
+const favoriteCount = computed(() => props.favorites.size)
+
+const normalizedSearch = computed(() => props.searchQuery.trim().toLowerCase())
+
+const articles = computed(() => {
+  const q = normalizedSearch.value
+  return KNOWLEDGE_ARTICLES.filter((article) => {
+    if (showFavoritesOnly.value && !props.favorites.has(article.id)) return false
+    if (!q) return true
+
+    return [
+      article.title,
+      article.description,
+      article.category,
+      article.section,
+      article.type,
+      article.summary,
+      ...article.steps.flatMap((step) => [step.title, step.content]),
+    ].some((value) => value.toLowerCase().includes(q))
+  })
+})
 
 const getIconColor = (color: string) => {
   const colors: Record<string, string> = {
@@ -30,12 +53,44 @@ const getIconColor = (color: string) => {
 
 <template>
   <div class="max-w-5xl mx-auto px-6 py-8">
-    <div class="mb-8">
-      <h1 class="text-3xl font-bold text-gray-900 mb-2">База знаний</h1>
-      <p class="text-gray-600">Руководства, инструкции и справочная информация для руководителей образовательных программ</p>
+    <div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">База знаний</h1>
+        <p class="text-gray-600">Руководства, инструкции и справочная информация для руководителей образовательных программ</p>
+      </div>
+      <button
+        @click="showFavoritesOnly = !showFavoritesOnly"
+        :class="[
+          'inline-flex items-center justify-center gap-2 self-start px-3.5 py-2 rounded-xl text-sm font-medium border transition-all',
+          showFavoritesOnly
+            ? 'bg-yellow-50 border-yellow-200 text-yellow-700 shadow-sm'
+            : 'bg-white border-gray-200 text-gray-600 hover:border-yellow-200 hover:text-yellow-600',
+        ]"
+      >
+        <Star :size="15" :fill="showFavoritesOnly ? 'currentColor' : 'none'" />
+        Избранное
+        <span
+          :class="[
+            'min-w-5 h-5 px-1.5 rounded-full text-[10px] flex items-center justify-center font-bold',
+            showFavoritesOnly ? 'bg-yellow-200 text-yellow-800' : 'bg-gray-100 text-gray-500',
+          ]"
+        >
+          {{ favoriteCount }}
+        </span>
+      </button>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div
+      v-if="articles.length === 0"
+      class="text-center py-16 text-gray-400 bg-white rounded-2xl border border-gray-200"
+    >
+      <Star :size="40" class="mx-auto mb-3 opacity-30" />
+      <p class="text-sm">
+        {{ normalizedSearch ? 'Материалы по запросу не найдены' : 'В избранном пока нет материалов' }}
+      </p>
+    </div>
+
+    <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       <button
         v-for="article in articles"
         :key="article.id"

@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
-import { Repeat2, Search, X, ChevronDown, Home, Map, BookOpen, ChevronRight } from 'lucide-vue-next'
+import { ref, computed, watch, nextTick } from 'vue'
+import { Repeat2, Search, X, Home, Map, BookOpen, ChevronRight } from 'lucide-vue-next'
 import HomePage from './app/components/pages/HomePage.vue'
 import RoadmapPage from './app/components/pages/RoadmapPage.vue'
 import KnowledgePage from './app/components/pages/KnowledgePage.vue'
 import ArticlePage from './app/components/pages/ArticlePage.vue'
 import TaskDetailPage from './app/components/pages/TaskDetailPage.vue'
 import Footer from './app/components/Footer.vue'
-import { ACADEMIC_YEARS, ALL_TASKS, KNOWLEDGE_ARTICLES } from './app/data'
+import { ALL_TASKS, KNOWLEDGE_ARTICLES } from './app/data'
 
 type MainTab = 'home' | 'roadmap' | 'knowledge'
 type PageView =
@@ -19,11 +19,9 @@ const view = ref<PageView>({ tab: 'roadmap' })
 const academicYear = ref('2025-2026')
 const searchQuery = ref('')
 const searchOpen = ref(false)
-const yearOpen = ref(false)
 const favorites = ref<Set<string>>(new Set())
 
 const searchInputRef = ref<HTMLInputElement | null>(null)
-const yearRef = ref<HTMLDivElement | null>(null)
 
 watch(searchOpen, (val) => {
   if (val) nextTick(() => searchInputRef.value?.focus())
@@ -69,15 +67,6 @@ const closeSearch = () => {
   searchOpen.value = false
   searchQuery.value = ''
 }
-
-const handleClickOutside = (e: MouseEvent) => {
-  if (yearRef.value && !yearRef.value.contains(e.target as Node)) {
-    yearOpen.value = false
-  }
-}
-
-onMounted(() => document.addEventListener('mousedown', handleClickOutside))
-onUnmounted(() => document.removeEventListener('mousedown', handleClickOutside))
 
 const navItems = [
   { id: 'home', label: 'Главная', icon: Home },
@@ -145,7 +134,7 @@ const navigateToTab = (tab: string) => {
               ref="searchInputRef"
               v-model="searchQuery"
               type="text"
-              placeholder="Поиск задач..."
+              placeholder="Поиск задач и статей..."
               class="bg-transparent border-none outline-none text-sm text-gray-800 w-48 placeholder:text-gray-400"
             />
             <button @click="closeSearch" class="text-gray-400 hover:text-gray-600 transition-colors">
@@ -160,34 +149,6 @@ const navigateToTab = (tab: string) => {
           >
             <Search :size="17" />
           </button>
-
-          <!-- Year selector -->
-          <div class="relative" ref="yearRef">
-            <button
-              @click="yearOpen = !yearOpen"
-              class="flex items-center gap-1.5 px-3.5 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-sm font-semibold text-gray-700 transition-colors"
-            >
-              {{ academicYear }}
-              <ChevronDown :size="13" :class="['transition-transform', yearOpen ? 'rotate-180' : '']" />
-            </button>
-            <div
-              v-if="yearOpen"
-              class="absolute right-0 top-full mt-2 w-36 bg-white rounded-2xl border border-gray-200 shadow-xl overflow-hidden z-30"
-            >
-              <button
-                v-for="yr in ACADEMIC_YEARS"
-                :key="yr"
-                @click="academicYear = yr; yearOpen = false"
-                :class="[
-                  'w-full text-left px-4 py-2.5 text-sm font-medium transition-colors flex items-center justify-between',
-                  yr === academicYear ? 'bg-indigo-50 text-indigo-700' : 'text-gray-700 hover:bg-gray-50',
-                ]"
-              >
-                {{ yr }}
-                <div v-if="yr === academicYear" class="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-              </button>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -215,7 +176,7 @@ const navigateToTab = (tab: string) => {
     </header>
 
     <!-- Page content -->
-    <main class="flex-1 overflow-auto">
+    <main class="flex-1">
       <HomePage
         v-if="activeTab === 'home'"
         :academic-year="academicYear"
@@ -227,11 +188,13 @@ const navigateToTab = (tab: string) => {
         v-else-if="!('articleId' in view) && !('taskId' in view) && activeTab === 'roadmap'"
         :search-query="searchQuery"
         :academic-year="academicYear"
+        @update-academic-year="academicYear = $event"
         @navigate-task="navigateToTask"
         @navigate-article="navigateToArticle"
       />
       <KnowledgePage
         v-else-if="!('articleId' in view) && !('taskId' in view) && activeTab === 'knowledge'"
+        :search-query="searchQuery"
         :favorites="favorites"
         @toggle-favorite="toggleFav"
         @open-article="navigateToArticle"

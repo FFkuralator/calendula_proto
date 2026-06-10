@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { SlidersHorizontal, ChevronDown, Check, X, List, Calendar, CalendarDays, Info, BookOpen, FileText, ExternalLink } from 'lucide-vue-next'
 import {
-  CATEGORIES, ACADEMIC_MONTHS, MONTH_NAMES_RU,
+  CATEGORIES, ACADEMIC_MONTHS, ACADEMIC_YEARS, MONTH_NAMES_RU,
   CATEGORY_CONFIG, ALL_TASKS,
   getAcademicYearRange, getCalendarYear,
 } from '../data/tasks'
@@ -19,6 +19,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'navigate-task', id: string): void
+  (e: 'update-academic-year', year: string): void
 }>()
 
 const SIDEBAR_DOCS = [
@@ -41,6 +42,7 @@ const defaultMonthEntry = ACADEMIC_MONTHS.find((m) => {
 
 const selectedMonths = ref<number[]>(defaultMonthEntry ? [defaultMonthEntry.index] : [])
 const showAllMonths = ref(selectedMonths.value.length === 0)
+const yearOpen = ref(false)
 const monthPickerOpen = ref(false)
 const filterOpen = ref(false)
 const activeCategories = ref<TaskCategory[]>([...CATEGORIES])
@@ -48,10 +50,12 @@ const viewMode = ref<ViewMode>('calendar')
 const weekRef = ref(new Date())
 
 const filterRef = ref<HTMLDivElement | null>(null)
+const yearRef = ref<HTMLDivElement | null>(null)
 const monthPickerRef = ref<HTMLDivElement | null>(null)
 
 const handleClickOutside = (e: MouseEvent) => {
   if (filterRef.value && !filterRef.value.contains(e.target as Node)) filterOpen.value = false
+  if (yearRef.value && !yearRef.value.contains(e.target as Node)) yearOpen.value = false
   if (monthPickerRef.value && !monthPickerRef.value.contains(e.target as Node)) monthPickerOpen.value = false
 }
 
@@ -121,6 +125,12 @@ function toggleMonth(idx: number) {
 function resetMonths() {
   selectedMonths.value = []
   showAllMonths.value = true
+}
+
+function selectAcademicYear(year: string) {
+  emit('update-academic-year', year)
+  yearOpen.value = false
+  resetMonths()
 }
 
 function resetFilters() {
@@ -206,6 +216,34 @@ const calendarMonths = computed(() => {
 
       <!-- Controls -->
       <div class="flex flex-wrap items-center gap-2.5 mb-4">
+        <div class="relative" ref="yearRef">
+          <button
+            @click="yearOpen = !yearOpen"
+            class="flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium border bg-white border-gray-200 text-gray-600 hover:border-indigo-200 hover:text-indigo-600 transition-all"
+          >
+            <Calendar :size="14" />
+            {{ academicYear }}
+            <ChevronDown :size="13" :class="['transition-transform', yearOpen ? 'rotate-180' : '']" />
+          </button>
+          <div
+            v-if="yearOpen"
+            class="absolute left-0 top-full mt-2 w-40 bg-white rounded-2xl border border-gray-200 shadow-xl overflow-hidden z-30"
+          >
+            <button
+              v-for="yr in ACADEMIC_YEARS"
+              :key="yr"
+              @click="selectAcademicYear(yr)"
+              :class="[
+                'w-full text-left px-4 py-2.5 text-sm font-medium transition-colors flex items-center justify-between',
+                yr === academicYear ? 'bg-indigo-50 text-indigo-700' : 'text-gray-700 hover:bg-gray-50',
+              ]"
+            >
+              {{ yr }}
+              <div v-if="yr === academicYear" class="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+            </button>
+          </div>
+        </div>
+
         <!-- All months button -->
         <button
           @click="handleSelectAllMonths"
@@ -242,7 +280,7 @@ const calendarMonths = computed(() => {
           </button>
           <div
             v-if="monthPickerOpen"
-            class="absolute left-0 top-full mt-2 w-60 bg-white rounded-2xl border border-gray-200 shadow-xl z-30 p-3"
+            class="absolute left-0 top-full mt-2 w-60 max-h-[calc(100vh-10rem)] overflow-y-auto bg-white rounded-2xl border border-gray-200 shadow-xl z-30 p-3"
           >
             <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1 mb-2">Выберите один или несколько</div>
             <div class="grid grid-cols-3 gap-1.5">
@@ -299,7 +337,7 @@ const calendarMonths = computed(() => {
           </button>
           <div
             v-if="filterOpen"
-            class="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl border border-gray-200 shadow-xl z-30 overflow-hidden"
+            class="absolute right-0 top-full mt-2 w-72 max-h-[calc(100vh-10rem)] overflow-y-auto bg-white rounded-2xl border border-gray-200 shadow-xl z-30"
           >
             <div class="p-4 border-b border-gray-100 flex items-center justify-between">
               <span class="text-sm font-semibold text-gray-800">Фильтры</span>
