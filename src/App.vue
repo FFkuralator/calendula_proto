@@ -7,7 +7,7 @@ import KnowledgePage from './app/components/pages/KnowledgePage.vue'
 import ArticlePage from './app/components/pages/ArticlePage.vue'
 import TaskDetailPage from './app/components/pages/TaskDetailPage.vue'
 import Footer from './app/components/Footer.vue'
-import { ALL_TASKS, KNOWLEDGE_ARTICLES } from './app/data'
+import { ALL_TASKS, INITIAL_NOTIFICATIONS, KNOWLEDGE_ARTICLES } from './app/data'
 
 type MainTab = 'home' | 'roadmap' | 'knowledge'
 type PageView =
@@ -180,9 +180,10 @@ const navigateToTab = (tab: string) => {
       <HomePage
         v-if="activeTab === 'home'"
         :academic-year="academicYear"
-        :notifications="[]"
+        :notifications="INITIAL_NOTIFICATIONS"
         @navigate-task="navigateToTask"
         @navigate-tab="navigateToTab"
+        @navigate-article="navigateToArticle"
       />
       <RoadmapPage
         v-else-if="!('articleId' in view) && !('taskId' in view) && activeTab === 'roadmap'"
